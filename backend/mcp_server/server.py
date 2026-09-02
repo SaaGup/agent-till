@@ -6,6 +6,7 @@ misbehaves, these functions can be handed to the model directly with no logic ch
 """
 
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 
 from app.catalog.service import get_product as _get_product
 from app.catalog.service import search_catalog as _search_catalog
@@ -13,6 +14,35 @@ from app.db import SessionLocal
 from app.payments.service import PaymentError, create_payment_intent, get_order_status
 
 mcp = FastMCP("razorpay-agent-storefront")
+
+SESSION_HEADER = "x-session-id"
+CORRELATION_HEADER = "x-correlation-id"
+
+
+class MissingSession(Exception):
+    pass
+
+
+def _caller_session_id() -> str:
+    """Session identity comes from the transport, never from the model.
+
+    It was briefly a tool parameter, and the agent promptly invented its own value
+    ('session-velocity-road-runner-1') instead of passing the real one. Since the cumulative
+    spend cap and the first-time-buyer gate both key off this id, a model that chooses it gets
+    a fresh ₹0 budget on every order — the cap becomes decorative. Binding it to the connection
+    puts it out of the model's reach entirely.
+    """
+    headers = get_http_headers()
+    session_id = headers.get(SESSION_HEADER, "").strip()
+    if not session_id:
+        raise MissingSession("No session bound to this MCP connection.")
+    return session_id[:64]
+
+
+def _caller_correlation_id() -> str | None:
+    """Ties every tool call in one agent turn — including a failure and the retry that
+    recovers from it — to a single chain in the audit trail."""
+    return get_http_headers().get(CORRELATION_HEADER, "").strip()[:36] or None
 
 
 @mcp.tool()
@@ -50,16 +80,15 @@ def get_product(product_id: str) -> dict:
 
 @mcp.tool()
 def create_payment_intent_tool(
-    buyer_session_id: str,
     items: list[dict],
     requested_discount_pct: float = 0.0,
 ) -> dict:
-    """Create a payment intent for a cart. Prices are always recomputed server-side from the
-    catalog — never pass or assume a price. The merchant's policy engine may cap the discount,
-    require human approval, or block the order outright; the response explains what happened.
+    """Create a payment intent for the current shopper's cart. Prices are always recomputed
+    server-side from the catalog — never pass or assume a price. The merchant's policy engine
+    may cap the discount, require human approval, or block the order outright; the response
+    explains what happened.
 
     Args:
-        buyer_session_id: The buyer's session identifier.
         items: Cart lines, each {"product_id": str, "qty": int}.
         requested_discount_pct: Discount to request, subject to the merchant's policy cap.
     """
@@ -67,10 +96,13 @@ def create_payment_intent_tool(
         try:
             return create_payment_intent(
                 db,
-                session_id=buyer_session_id,
+                session_id=_caller_session_id(),
                 items=items,
                 requested_discount_pct=requested_discount_pct,
+                correlation_id=_caller_correlation_id(),
             )
+        except MissingSession as e:
+            return {"error": f"NO_SESSION: {e}"}
         except PaymentError as e:
             return {"error": f"{e.code}: {e.message}"}
 

@@ -58,7 +58,7 @@ async def run_buyer_turn(session_id: str, user_message: str) -> AsyncIterator[di
     history.append({"role": "user", "content": user_message[:MAX_MESSAGE_CHARS]})
 
     try:
-        async with mcp_session() as session:
+        async with mcp_session(session_id, correlation_id) as session:
             listed = await session.list_tools()
             tools = llm.format_tools(listed.tools)
 
@@ -78,7 +78,7 @@ async def run_buyer_turn(session_id: str, user_message: str) -> AsyncIterator[di
 
                     result = await session.call_tool(call.name, call.arguments)
                     payload = _result_text(result)
-                    is_error = bool(getattr(result, "isError", False)) or _looks_like_error(payload)
+                    is_error = bool(getattr(result, "is_error", False)) or _looks_like_error(payload)
                     breaker.record_result(is_error=is_error)
 
                     yield {

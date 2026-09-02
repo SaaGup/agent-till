@@ -8,12 +8,21 @@ Anthropic, so the provider is a config line rather than a rewrite.
 
 import json
 import logging
+import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.config import settings
 
 log = logging.getLogger(__name__)
+
+MAX_RATE_LIMIT_RETRIES = 3
+
+
+def _suggested_retry_delay(message: str) -> float | None:
+    match = re.search(r"retryDelay'?: '?(\d+(?:\.\d+)?)s", message)
+    return float(match.group(1)) if match else None
 
 
 @dataclass
@@ -46,7 +55,7 @@ def _tools_openai(mcp_tools: list) -> list[dict]:
             "function": {
                 "name": t.name,
                 "description": (t.description or "").strip()[:1024],
-                "parameters": t.inputSchema,
+                "parameters": t.input_schema,
             },
         }
         for t in mcp_tools
@@ -75,8 +84,26 @@ class OpenAICompatLLM:
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
+    def _create(self, **kwargs):
+        """Free tiers throttle aggressively, and a 429 mid-demo would look like a crash.
+        Retries the provider's own suggested delay before giving up."""
+        from openai import RateLimitError
+
+        delay = 2.0
+        for attempt in range(MAX_RATE_LIMIT_RETRIES):
+            try:
+                return self._client.chat.completions.create(**kwargs)
+            except RateLimitError as e:
+                if attempt == MAX_RATE_LIMIT_RETRIES - 1:
+                    raise
+                wait = _suggested_retry_delay(str(e)) or delay
+                log.warning("rate limited, retrying", extra={"wait_s": wait, "attempt": attempt})
+                time.sleep(min(wait, 30))
+                delay *= 2
+        raise RuntimeError("unreachable")
+
     def step(self, system: str, messages: list[dict], tools: list[dict]) -> Step:
-        response = self._client.chat.completions.create(
+        response = self._create(
             model=self._model,
             messages=[{"role": "system", "content": system}, *messages],
             tools=tools or None,
@@ -99,6 +126,16 @@ class OpenAICompatLLM:
         return Step(text=message.content or "", tool_calls=calls, raw=message)
 
     def assistant_message(self, step: Step) -> dict:
+        # Echo the provider's own message back rather than rebuilding it from the fields we
+        # parsed. Gemini 3.x attaches a thought_signature inside tool_calls[].extra_content and
+        # rejects the next turn if it goes missing; rebuilding silently drops any such
+        # provider-specific data.
+        if step.raw is not None:
+            try:
+                return step.raw.model_dump(exclude_none=True)
+            except AttributeError:
+                pass
+
         msg: dict = {"role": "assistant", "content": step.text or ""}
         if step.tool_calls:
             msg["tool_calls"] = [
@@ -115,7 +152,7 @@ class OpenAICompatLLM:
         return {"role": "tool", "tool_call_id": call.id, "content": content}
 
     def complete(self, system: str, prompt: str, max_tokens: int = 400) -> str:
-        response = self._client.chat.completions.create(
+        response = self._create(
             model=self._model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
             max_tokens=max_tokens,

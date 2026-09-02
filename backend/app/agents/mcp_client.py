@@ -8,6 +8,7 @@ than just internally refactored.
 import logging
 from contextlib import asynccontextmanager
 
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -21,8 +22,18 @@ def mcp_url() -> str:
 
 
 @asynccontextmanager
-async def mcp_session():
-    async with streamable_http_client(mcp_url()) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+async def mcp_session(session_id: str, correlation_id: str = ""):
+    """The shopper's session id rides on the connection, not in the tool arguments, so the
+    model cannot choose which session it is spending from.
+
+    The turn's correlation id rides along too, so a failure and the recovery that follows it
+    land in the audit trail as one readable chain rather than unrelated rows.
+    """
+    headers = {"X-Session-Id": session_id}
+    if correlation_id:
+        headers["X-Correlation-Id"] = correlation_id
+    async with httpx2.AsyncClient(headers=headers) as http_client:
+        async with streamable_http_client(mcp_url(), http_client=http_client) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session

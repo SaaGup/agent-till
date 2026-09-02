@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     llm_provider: str = "openai_compat"
     llm_api_key: str = ""
     llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    llm_model: str = "gemini-3-flash"
+    llm_model: str = "gemini-3.5-flash-lite"
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
