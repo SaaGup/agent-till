@@ -16,7 +16,7 @@ from app.middleware.error_handlers import register_error_handlers
 from app.middleware.rate_limit import limiter
 from app.models import Base
 from app.payments import webhooks
-from app.routers import dashboard, payments
+from app.routers import chat, dashboard, payments
 
 configure_logging()
 log = logging.getLogger(__name__)
@@ -64,6 +64,7 @@ app.add_middleware(
 )
 register_error_handlers(app)
 
+app.include_router(chat.router)
 app.include_router(dashboard.router)
 app.include_router(payments.router)
 app.include_router(webhooks.router)
