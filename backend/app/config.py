@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
 
-    # Anthropic
+    # Agent LLM. "openai_compat" works with any OpenAI-compatible endpoint (Groq, Cerebras,
+    # OpenRouter, Gemini's compat endpoint); "anthropic" uses the Claude API directly.
+    llm_provider: str = "openai_compat"
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.groq.com/openai/v1"
+    llm_model: str = "llama-3.3-70b-versatile"
+
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
 

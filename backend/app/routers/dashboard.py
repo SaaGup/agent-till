@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from app.agents.llm import llm_enabled
 from app.config import settings
 from app.db import get_db
 from app.models import ApprovalRequest, AuditLogEntry, Order, Product
@@ -21,7 +22,7 @@ def public_config() -> dict:
     return {
         "razorpay_key_id": settings.razorpay_key_id,
         "payments_live": bool(settings.razorpay_key_id and settings.razorpay_key_secret),
-        "agent_enabled": bool(settings.anthropic_api_key),
+        "agent_enabled": llm_enabled(),
     }
 
 

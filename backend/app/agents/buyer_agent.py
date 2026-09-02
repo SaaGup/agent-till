@@ -1,20 +1,18 @@
 """The AI Buyer agent.
 
-Runs an explicit tool-use loop rather than the SDK's turnkey runner, because every tool call
-has to pass through the circuit breaker and be surfaced to the UI as it happens — the visible
-tool trace is the point, not an implementation detail.
+Runs an explicit tool-use loop rather than a turnkey SDK runner, because every tool call has
+to pass through the circuit breaker and be surfaced to the UI as it happens — the visible tool
+trace is the point, not an implementation detail. The loop is provider-agnostic (see llm.py).
 """
 
 import json
 import logging
 from collections.abc import AsyncIterator
 
-import anthropic
-
-from app.agents.mcp_client import mcp_tools
+from app.agents.llm import build_llm
+from app.agents.mcp_client import mcp_session
 from app.agents.prompts import BUYER_SYSTEM_PROMPT
 from app.audit.logger import log_action, new_correlation_id
-from app.config import settings
 from app.db import SessionLocal
 from app.policy.engine import CircuitBreaker, CircuitOpenError
 from app.policy.rules import PolicyConfig
@@ -25,30 +23,12 @@ log = logging.getLogger(__name__)
 # disposable, and nothing here is the system of record — the audit log is.
 _HISTORY: dict[str, list[dict]] = {}
 MAX_MESSAGE_CHARS = 2000
-
-
-def _client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
-
-def _to_anthropic_tools(mcp_tool_list) -> list[dict]:
-    return [
-        {
-            "name": t.name,
-            "description": (t.description or "").strip(),
-            "input_schema": t.inputSchema,
-        }
-        for t in mcp_tool_list
-    ]
+MAX_HISTORY_MESSAGES = 40
 
 
 def _result_text(result) -> str:
-    parts = []
-    for block in result.content:
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "\n".join(parts) if parts else "{}"
+    parts = [getattr(b, "text", None) for b in result.content]
+    return "\n".join(p for p in parts if p) or "{}"
 
 
 def _looks_like_error(payload: str) -> bool:
@@ -65,71 +45,49 @@ async def run_buyer_turn(session_id: str, user_message: str) -> AsyncIterator[di
     breaker = CircuitBreaker(cfg)
     correlation_id = new_correlation_id()
 
-    if not settings.anthropic_api_key:
+    llm = build_llm()
+    if llm is None:
         yield {
             "type": "error",
-            "message": "No Anthropic API key configured, so the buyer agent can't reason yet.",
+            "message": "No model provider is configured, so the buyer agent can't reason yet.",
         }
         yield {"type": "done"}
         return
 
-    user_message = user_message[:MAX_MESSAGE_CHARS]
     history = _HISTORY.setdefault(session_id, [])
-    history.append({"role": "user", "content": user_message})
-
-    client = _client()
+    history.append({"role": "user", "content": user_message[:MAX_MESSAGE_CHARS]})
 
     try:
-        async with mcp_tools() as (mcp_session, _sdk_tools):
-            listed = await mcp_session.list_tools()
-            tools = _to_anthropic_tools(listed.tools)
+        async with mcp_session() as session:
+            listed = await session.list_tools()
+            tools = llm.format_tools(listed.tools)
 
             while True:
-                response = client.messages.create(
-                    model=settings.anthropic_model,
-                    max_tokens=2048,
-                    system=BUYER_SYSTEM_PROMPT,
-                    tools=tools,
-                    messages=history,
-                )
-                history.append({"role": "assistant", "content": response.content})
+                step = llm.step(BUYER_SYSTEM_PROMPT, history, tools)
+                history.append(llm.assistant_message(step))
 
-                for block in response.content:
-                    if block.type == "text" and block.text.strip():
-                        yield {"type": "text", "text": block.text}
+                if step.text.strip():
+                    yield {"type": "text", "text": step.text}
 
-                if response.stop_reason != "tool_use":
+                if not step.tool_calls:
                     break
 
-                tool_results = []
-                for block in response.content:
-                    if block.type != "tool_use":
-                        continue
-
+                for call in step.tool_calls:
                     breaker.record_call()
-                    yield {"type": "tool_call", "name": block.name, "input": block.input}
+                    yield {"type": "tool_call", "name": call.name, "input": call.arguments}
 
-                    result = await mcp_session.call_tool(block.name, block.input or {})
+                    result = await session.call_tool(call.name, call.arguments)
                     payload = _result_text(result)
                     is_error = bool(getattr(result, "isError", False)) or _looks_like_error(payload)
                     breaker.record_result(is_error=is_error)
 
                     yield {
                         "type": "tool_result",
-                        "name": block.name,
+                        "name": call.name,
                         "is_error": is_error,
                         "result": payload[:1500],
                     }
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": payload,
-                            "is_error": is_error,
-                        }
-                    )
-
-                history.append({"role": "user", "content": tool_results})
+                    history.append(llm.tool_result_message(call, payload, is_error))
 
     except CircuitOpenError as e:
         with SessionLocal() as db:
@@ -154,6 +112,10 @@ async def run_buyer_turn(session_id: str, user_message: str) -> AsyncIterator[di
     except Exception:
         log.exception("buyer agent turn failed")
         yield {"type": "error", "message": "The assistant hit an unexpected problem."}
+
+    # Trim oldest turns rather than growing the context (and the bill) without bound.
+    if len(history) > MAX_HISTORY_MESSAGES:
+        del history[: len(history) - MAX_HISTORY_MESSAGES]
 
     yield {"type": "done"}
 

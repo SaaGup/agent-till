@@ -8,13 +8,12 @@ it does not set the price.
 import json
 import logging
 
-import anthropic
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents.llm import build_llm
 from app.agents.prompts import GROWTH_SYSTEM_PROMPT
 from app.audit.logger import log_action, new_correlation_id
-from app.config import settings
 from app.models import Product
 from app.policy.engine import evaluate_discount
 from app.policy.rules import PolicyConfig
@@ -39,29 +38,22 @@ def _candidates(db: Session, cart_product_ids: list[str]) -> list[Product]:
 
 
 def _ask_model(candidates: list[Product], buyer_intent_summary: str) -> dict | None:
-    if not settings.anthropic_api_key:
+    llm = build_llm()
+    if llm is None:
         return None
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     listing = [
         {"id": p.id, "name": p.name, "price_inr": p.price_inr, "tags": p.tags} for p in candidates
     ]
     try:
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=400,
-            system=GROWTH_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Shopper wants: {buyer_intent_summary}\n"
-                        f"Candidates: {json.dumps(listing)}"
-                    ),
-                }
-            ],
+        raw = llm.complete(
+            GROWTH_SYSTEM_PROMPT,
+            f"Shopper wants: {buyer_intent_summary}\nCandidates: {json.dumps(listing)}",
         )
-        raw = next(b.text for b in response.content if b.type == "text")
-        return json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
+        cleaned = raw.strip()
+        # Smaller models often wrap JSON in a fence despite being told not to.
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("```")[1].removeprefix("json").strip()
+        return json.loads(cleaned)
     except Exception:
         log.exception("growth co-pilot model call failed; falling back to a rule")
         return None

@@ -8,7 +8,6 @@ than just internally refactored.
 import logging
 from contextlib import asynccontextmanager
 
-from anthropic.lib.tools.mcp import async_mcp_tool
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -22,12 +21,8 @@ def mcp_url() -> str:
 
 
 @asynccontextmanager
-async def mcp_tools():
-    """Yields (session, sdk_tools) ready to hand to the Anthropic tool runner."""
+async def mcp_session():
     async with streamable_http_client(mcp_url()) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            listed = await session.list_tools()
-            tools = [async_mcp_tool(t, session) for t in listed.tools]
-            log.info("mcp tools loaded", extra={"tool_count": len(tools)})
-            yield session, tools
+            yield session
