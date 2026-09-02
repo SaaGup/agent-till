@@ -31,6 +31,20 @@ export const auth = {
  *  instead of rendering an empty dashboard that looks broken. */
 export class Unauthorized extends Error {}
 
+/** Carries the status through so callers can tell "wrong password" from "rate limited" from
+ *  "the server is down". Collapsing all three into one message told people their credentials
+ *  were wrong when they were fine. */
+export class ApiError extends Error {
+  status: number
+  body: string
+
+  constructor(status: number, body: string) {
+    super(`${status} ${body}`)
+    this.status = status
+    this.body = body
+  }
+}
+
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const token = auth.token
   const res = await fetch(`${BASE}${path}`, {
@@ -42,7 +56,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     },
   })
   if (res.status === 401 || res.status === 403) throw new Unauthorized(await res.text())
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+  if (!res.ok) throw new ApiError(res.status, await res.text())
   return res.json() as Promise<T>
 }
 

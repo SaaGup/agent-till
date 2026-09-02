@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { ApiError, Unauthorized, api } from '../api/client'
 import { Tilt } from './Tilt'
 
 interface Props {
@@ -35,8 +35,16 @@ export function LoginPage({ onAuthenticated, demoEmail, demoPassword }: Props) {
     try {
       const { token, user } = await api.login(email, password)
       onAuthenticated(token, user.display_name || user.email)
-    } catch {
-      setError('Incorrect email or password.')
+    } catch (e) {
+      if (e instanceof Unauthorized) {
+        setError('Incorrect email or password.')
+      } else if (e instanceof ApiError && e.status === 429) {
+        setError('Too many sign-in attempts. Wait a minute and try again — your details are fine.')
+      } else if (e instanceof ApiError) {
+        setError(`The server rejected the request (${e.status}). Check the backend is running.`)
+      } else {
+        setError("Couldn't reach the server. Check the backend is running and CORS allows this origin.")
+      }
     } finally {
       setBusy(false)
     }

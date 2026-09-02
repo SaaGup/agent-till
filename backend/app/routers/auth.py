@@ -9,7 +9,9 @@ from app.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-LOGIN_LIMIT = "8/minute"
+# Per-IP. Judges behind one office NAT share a bucket, and a fumbled password should not
+# lock the room out of a live demo.
+LOGIN_LIMIT = "30/minute"
 
 
 class LoginRequest(BaseModel):
