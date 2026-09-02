@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # Demo/ops
     demo_key: str = "change-me"
+    mcp_port: int = 8800
 
     # Policy defaults (overridable per-env without code changes)
     policy_max_discount_pct: float = 20.0

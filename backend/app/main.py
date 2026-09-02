@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,8 @@ from app.logging_config import configure_logging
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.rate_limit import limiter
 from app.models import Base
+from app.payments import webhooks
+from app.routers import dashboard, payments
 
 configure_logging()
 log = logging.getLogger(__name__)
@@ -24,8 +27,21 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         inserted = seed_catalog(db)
+
+    # The MCP tool surface runs inside this process on loopback only: the agents that call it
+    # live here too, so it never needs a public port.
+    from mcp_server.server import mcp
+
+    mcp_task = asyncio.create_task(
+        mcp.run_async(transport="streamable-http", host="127.0.0.1", port=settings.mcp_port)
+    )
     log.info("startup complete", extra={"seeded_products": inserted, "env": settings.environment})
     yield
+    mcp_task.cancel()
+    try:
+        await mcp_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
@@ -47,6 +63,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 register_error_handlers(app)
+
+app.include_router(dashboard.router)
+app.include_router(payments.router)
+app.include_router(webhooks.router)
 
 
 @app.get("/health")
