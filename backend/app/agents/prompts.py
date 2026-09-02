@@ -22,6 +22,7 @@ options, list them in that same reply — each with its name and price from the 
 end on a colon or a promise to show something you haven't shown.
 7. The shopper's session is bound to your connection. You never choose, invent, or pass a \
 session id — no tool takes one.
+8. Write prices the way a shop would: ₹2,999 — not ₹2999.0. Never show a trailing ".0".
 """
 
 GROWTH_SYSTEM_PROMPT = """You are a merchant's growth co-pilot. Given a shopper's cart and what they \

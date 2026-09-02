@@ -3,6 +3,7 @@ import type { ChatItem, UpsellProposal } from '../types'
 import { ToolCallChip } from './ToolCallChip'
 import { UpsellCard } from './UpsellCard'
 import { CheckoutButton } from './CheckoutButton'
+import { AgentText } from './AgentText'
 
 interface PendingCheckout {
   razorpayOrderId: string
@@ -96,8 +97,8 @@ export function ChatPanel({
           if (item.kind === 'agent') {
             return (
               <div key={i} className="flex justify-start">
-                <p className="animate-rise max-w-[85%] rounded-2xl rounded-bl-sm bg-rzp-surface px-3.5 py-2 text-sm whitespace-pre-wrap text-rzp-navy">
-                  {item.text}
+                <p className="animate-rise max-w-[85%] rounded-2xl rounded-bl-sm bg-rzp-surface px-3.5 py-2 text-sm text-rzp-navy">
+                  <AgentText text={item.text} />
                 </p>
               </div>
             )
