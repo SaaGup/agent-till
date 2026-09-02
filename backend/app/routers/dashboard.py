@@ -15,6 +15,16 @@ class ApprovalDecision(BaseModel):
     approve: bool
 
 
+@router.get("/config")
+def public_config() -> dict:
+    """Only ever the publishable key id — the secret stays server-side."""
+    return {
+        "razorpay_key_id": settings.razorpay_key_id,
+        "payments_live": bool(settings.razorpay_key_id and settings.razorpay_key_secret),
+        "agent_enabled": bool(settings.anthropic_api_key),
+    }
+
+
 @router.get("/catalog")
 def list_catalog(db: Session = Depends(get_db)) -> list[dict]:
     products = db.execute(select(Product).order_by(Product.category, Product.price_inr)).scalars().all()
