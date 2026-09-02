@@ -60,6 +60,25 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** Render's free tier sleeps after 15 minutes and takes about a minute to wake, so the first
+ *  request after idle simply fails. Retrying with backoff turns "couldn't reach the server"
+ *  into a short wait instead of a dead page in front of an audience. */
+export async function waitForBackend(
+  onAttempt: (attempt: number) => void,
+  maxAttempts = 12,
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fetch(`${BASE}/health`)
+      return true
+    } catch {
+      onAttempt(attempt)
+      await new Promise((r) => setTimeout(r, Math.min(1000 * attempt, 6000)))
+    }
+  }
+  return false
+}
+
 export const api = {
   config: () =>
     json<{

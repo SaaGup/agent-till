@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, Unauthorized, api } from '../api/client'
+import { ApiError, Unauthorized, api, waitForBackend } from '../api/client'
 import { Tilt } from './Tilt'
 
 interface Props {
@@ -20,6 +20,7 @@ export function LoginPage({ onAuthenticated, demoEmail, demoPassword }: Props) {
   const [password, setPassword] = useState(demoPassword)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [waking, setWaking] = useState(false)
 
   // Config arrives after first paint, so the initial useState values are empty. Fill the form
   // once it lands — but never overwrite what the operator has started typing.
@@ -43,7 +44,17 @@ export function LoginPage({ onAuthenticated, demoEmail, demoPassword }: Props) {
       } else if (e instanceof ApiError) {
         setError(`The server rejected the request (${e.status}). Check the backend is running.`)
       } else {
-        setError("Couldn't reach the server. Check the backend is running and CORS allows this origin.")
+        // A sleeping free-tier backend and a genuinely dead one look identical from here, so
+        // wait for it rather than declaring failure on the first try.
+        setWaking(true)
+        setError('')
+        const awake = await waitForBackend(() => {})
+        setWaking(false)
+        if (awake) {
+          setError('The server was asleep and is awake now — press Enter console again.')
+        } else {
+          setError("Couldn't reach the server. Check the backend is running and that CORS allows this origin.")
+        }
       }
     } finally {
       setBusy(false)
@@ -158,10 +169,10 @@ export function LoginPage({ onAuthenticated, demoEmail, demoPassword }: Props) {
 
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || waking}
                 className="glow-accent mt-6 w-full rounded-lg bg-linear-to-r from-rzp-blue to-accent px-4 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px disabled:opacity-60"
               >
-                {busy ? 'Signing in…' : 'Enter console'}
+                {waking ? 'Waking the server…' : busy ? 'Signing in…' : 'Enter console'}
               </button>
 
               <div className="mt-5 rounded-lg border border-line-soft bg-ink-850/60 px-3 py-2.5">
