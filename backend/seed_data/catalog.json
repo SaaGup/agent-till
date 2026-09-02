@@ -1,0 +1,110 @@
+[
+  {
+    "id": "shoe-velocity-2999",
+    "name": "Velocity Road Runner",
+    "description": "Lightweight daily trainer with responsive foam midsole. The everyday workhorse for road running.",
+    "price_inr": 2999,
+    "category": "footwear",
+    "stock_qty": 12,
+    "tags": ["running", "shoes", "road", "lightweight"]
+  },
+  {
+    "id": "shoe-trail-2499",
+    "name": "Trailhead GTX",
+    "description": "Grippy trail shoe with a rock plate and water-resistant upper for mixed terrain.",
+    "price_inr": 2499,
+    "category": "footwear",
+    "stock_qty": 8,
+    "tags": ["running", "shoes", "trail", "waterproof"]
+  },
+  {
+    "id": "shoe-tempo-4499",
+    "name": "Tempo Elite Carbon",
+    "description": "Carbon-plated race-day shoe. Premium build — crosses the merchant approval threshold.",
+    "price_inr": 4499,
+    "category": "footwear",
+    "stock_qty": 4,
+    "tags": ["running", "shoes", "racing", "carbon", "premium"]
+  },
+  {
+    "id": "shoe-daily-1799",
+    "name": "Daily Cruiser",
+    "description": "Budget-friendly cushioned trainer for easy miles and gym sessions.",
+    "price_inr": 1799,
+    "category": "footwear",
+    "stock_qty": 20,
+    "tags": ["running", "shoes", "budget", "cushioned"]
+  },
+  {
+    "id": "shoe-flash-2799",
+    "name": "Flashpoint Speed",
+    "description": "Reserved demo SKU for the out-of-stock failure scenario. Snappy tempo trainer.",
+    "price_inr": 2799,
+    "category": "footwear",
+    "stock_qty": 3,
+    "tags": ["running", "shoes", "tempo", "demo"]
+  },
+  {
+    "id": "sock-pro-199",
+    "name": "Running Socks Pro (3-pack)",
+    "description": "Cushioned, blister-resistant crew socks. Frequently bought with running shoes.",
+    "price_inr": 199,
+    "category": "accessories",
+    "stock_qty": 60,
+    "tags": ["socks", "accessories", "upsell", "running"]
+  },
+  {
+    "id": "insole-arch-699",
+    "name": "ArchSupport Insoles",
+    "description": "Moulded insoles for overpronators. Pairs well with neutral trainers.",
+    "price_inr": 699,
+    "category": "accessories",
+    "stock_qty": 25,
+    "tags": ["insoles", "accessories", "upsell", "support"]
+  },
+  {
+    "id": "bottle-hydro-449",
+    "name": "HydroGrip Handheld Bottle",
+    "description": "350ml soft flask with a hand strap for long runs.",
+    "price_inr": 449,
+    "category": "accessories",
+    "stock_qty": 30,
+    "tags": ["hydration", "accessories", "upsell", "running"]
+  },
+  {
+    "id": "shorts-stride-1299",
+    "name": "Stride 5-inch Shorts",
+    "description": "Lined running shorts with zip pocket and reflective trim.",
+    "price_inr": 1299,
+    "category": "apparel",
+    "stock_qty": 18,
+    "tags": ["shorts", "apparel", "running"]
+  },
+  {
+    "id": "tee-airflow-899",
+    "name": "Airflow Tech Tee",
+    "description": "Breathable moisture-wicking short-sleeve running tee.",
+    "price_inr": 899,
+    "category": "apparel",
+    "stock_qty": 22,
+    "tags": ["tee", "apparel", "running"]
+  },
+  {
+    "id": "jacket-shell-3299",
+    "name": "Windshell Lite Jacket",
+    "description": "Packable wind-resistant shell. Above the approval threshold on its own.",
+    "price_inr": 3299,
+    "category": "apparel",
+    "stock_qty": 6,
+    "tags": ["jacket", "apparel", "premium"]
+  },
+  {
+    "id": "watch-pace-5999",
+    "name": "PaceTrack GPS Watch",
+    "description": "GPS running watch with heart-rate. Exceeds the per-transaction hard cap.",
+    "price_inr": 5999,
+    "category": "electronics",
+    "stock_qty": 5,
+    "tags": ["watch", "gps", "electronics", "premium"]
+  }
+]
