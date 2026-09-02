@@ -4,9 +4,10 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.agents.llm import llm_enabled
+from app.auth.service import require_merchant
 from app.config import settings
 from app.db import get_db
-from app.models import ApprovalRequest, AuditLogEntry, Order, Product
+from app.models import ApprovalRequest, AuditLogEntry, Order, Product, User
 from app.payments.service import PaymentError, approve_order
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -23,6 +24,10 @@ def public_config() -> dict:
         "razorpay_key_id": settings.razorpay_key_id,
         "payments_live": bool(settings.razorpay_key_id and settings.razorpay_key_secret),
         "agent_enabled": llm_enabled(),
+        # Deliberately published: this is a public demo and judges need a way in. A real
+        # deployment sets its own merchant credentials via env and would drop these.
+        "demo_merchant_email": settings.demo_merchant_email,
+        "demo_merchant_password": settings.demo_merchant_password,
     }
 
 
@@ -87,7 +92,9 @@ def list_audit_log(db: Session = Depends(get_db), limit: int = 100) -> list[dict
 
 
 @router.get("/approvals")
-def list_approvals(db: Session = Depends(get_db)) -> list[dict]:
+def list_approvals(
+    db: Session = Depends(get_db), _: User = Depends(require_merchant)
+) -> list[dict]:
     rows = (
         db.execute(
             select(ApprovalRequest)
@@ -112,7 +119,10 @@ def list_approvals(db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("/approvals/{approval_id}/decision")
 def decide_approval(
-    approval_id: str, body: ApprovalDecision, db: Session = Depends(get_db)
+    approval_id: str,
+    body: ApprovalDecision,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_merchant),
 ) -> dict:
     try:
         return approve_order(db, approval_id, body.approve)
@@ -135,7 +145,9 @@ def metrics(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/demo/force-out-of-stock/{product_id}")
 def force_out_of_stock(
-    product_id: str, x_demo_key: str = Header(default=""), db: Session = Depends(get_db)
+    product_id: str,
+    x_demo_key: str = Header(default=""),
+    db: Session = Depends(get_db),
 ) -> dict:
     # Deliberately breaks catalog state for the failure demo, so it must not be publicly
     # triggerable on a live URL.

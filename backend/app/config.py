@@ -26,9 +26,17 @@ class Settings(BaseSettings):
     # CORS
     allowed_origin: str = "http://localhost:5173"
 
+    # Auth
+    jwt_secret: str = "dev-only-insecure-secret-change-me-in-production"
+    demo_merchant_email: str = "merchant@agenttill.dev"
+    demo_merchant_password: str = "AgentTill!2026"
+
     # Demo/ops
     demo_key: str = "change-me"
     mcp_port: int = 8800
+    # Lets the API run without binding the MCP port — used by tests, and useful if the port
+    # is already taken locally.
+    enable_mcp_server: bool = True
 
     # Policy defaults (overridable per-env without code changes)
     policy_max_discount_pct: float = 20.0

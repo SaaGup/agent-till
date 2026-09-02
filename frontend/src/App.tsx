@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, streamChat } from './api/client'
+import { api, auth, streamChat, Unauthorized } from './api/client'
 import { ChatPanel } from './components/ChatPanel'
 import { MerchantDashboard } from './components/MerchantDashboard'
 import { AuditTrailView } from './components/AuditTrailView'
+import { LoginPage } from './components/LoginPage'
 import type { Approval, AuditEntry, ChatItem, Metrics, Order, UpsellProposal } from './types'
 
 function sessionId(): string {
-  const key = 'agent-storefront-session'
+  const key = 'agent-till-session'
   let id = localStorage.getItem(key)
   if (!id) {
     id = `sess-${crypto.randomUUID().slice(0, 12)}`
@@ -19,6 +20,15 @@ type Tab = 'dashboard' | 'audit'
 
 export default function App() {
   const session = useMemo(sessionId, [])
+  const [token, setToken] = useState<string | null>(auth.token)
+  const [merchant, setMerchant] = useState('')
+  const [config, setConfig] = useState<{
+    razorpay_key_id: string
+    demo_merchant_email: string
+    demo_merchant_password: string
+    agent_enabled: boolean
+  } | null>(null)
+
   const [items, setItems] = useState<ChatItem[]>([])
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<Tab>('dashboard')
@@ -29,18 +39,26 @@ export default function App() {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [deciding, setDeciding] = useState<string | null>(null)
 
-  const [razorpayKeyId, setRazorpayKeyId] = useState('')
   const [upsell, setUpsell] = useState<UpsellProposal | null>(null)
   const [checkout, setCheckout] = useState<
     { razorpayOrderId: string; razorpayKeyId: string; amountInr: number } | null
   >(null)
 
-  // Product ids the agent has actually put in a cart, so the co-pilot suggests a complement
-  // rather than something already being bought.
   const cartRef = useRef<string[]>([])
   const lastIntentRef = useRef('')
 
+  useEffect(() => {
+    api.config().then(setConfig).catch(() => {})
+  }, [])
+
+  const signOut = useCallback(() => {
+    auth.clear()
+    setToken(null)
+    setMerchant('')
+  }, [])
+
   const refresh = useCallback(async () => {
+    if (!token) return
     try {
       const [o, a, ap, m] = await Promise.all([
         api.orders(),
@@ -52,23 +70,18 @@ export default function App() {
       setAudit(a)
       setApprovals(ap)
       setMetrics(m)
-    } catch {
-      // Dashboard polling is best-effort; a blip shouldn't surface as a chat error.
+    } catch (e) {
+      // An expired session should return the operator to sign-in, not leave a dashboard that
+      // silently stops updating.
+      if (e instanceof Unauthorized) signOut()
     }
-  }, [])
+  }, [token, signOut])
 
   useEffect(() => {
     refresh()
     const t = setInterval(refresh, 3000)
     return () => clearInterval(t)
   }, [refresh])
-
-  useEffect(() => {
-    api
-      .config()
-      .then((c) => setRazorpayKeyId(c.razorpay_key_id))
-      .catch(() => {})
-  }, [])
 
   const maybeProposeUpsell = useCallback(async () => {
     if (cartRef.current.length === 0 || upsell) return
@@ -120,16 +133,16 @@ export default function App() {
                   })
                 }
               } catch {
-                // Not every intent yields a payable order — approval-gated ones don't.
+                // Approval-gated intents have no payable order yet.
               }
             }
 
-            if (event.name === 'search_catalog' || event.name === 'get_product') {
+            if (event.name === 'get_product') {
               try {
                 const parsed = JSON.parse(event.result) as { id?: string }
                 if (parsed.id) cartRef.current = [...new Set([...cartRef.current, parsed.id])]
               } catch {
-                /* search results are a list, not a single product */
+                /* not a single product */
               }
             }
           } else if (event.type === 'error') {
@@ -159,7 +172,7 @@ export default function App() {
       if (approve && result.razorpay_order_id) {
         setCheckout({
           razorpayOrderId: result.razorpay_order_id,
-          razorpayKeyId,
+          razorpayKeyId: config?.razorpay_key_id ?? '',
           amountInr: result.amount_inr,
         })
       }
@@ -169,38 +182,67 @@ export default function App() {
           ? { kind: 'agent', text: 'The merchant approved your order — you can pay below.' }
           : { kind: 'notice', text: 'The merchant denied this order.', tone: 'error' },
       ])
+    } catch (e) {
+      if (e instanceof Unauthorized) signOut()
     } finally {
       setDeciding(null)
       refresh()
     }
   }
 
+  if (!token) {
+    return (
+      <LoginPage
+        demoEmail={config?.demo_merchant_email ?? ''}
+        demoPassword={config?.demo_merchant_password ?? ''}
+        onAuthenticated={(t, name) => {
+          auth.set(t)
+          setToken(t)
+          setMerchant(name)
+        }}
+      />
+    )
+  }
+
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-rzp-border bg-white px-5 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-rzp-blue-bright to-rzp-blue text-sm font-bold text-white">
-            ₹
-          </div>
-          <div>
-            <h1 className="text-sm font-semibold text-rzp-navy">Agent Till</h1>
-            <p className="text-[11px] text-rzp-muted">
-              The merchant till AI agents can use — and never overspend
-            </p>
-          </div>
+    <div className="relative flex h-screen flex-col bg-ink-900">
+      <div className="aurora" />
+
+      <header className="relative z-10 flex items-center gap-3 border-b border-line bg-ink-850/70 px-5 py-3 backdrop-blur-xl">
+        <div className="glow-accent flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-accent-soft to-rzp-blue text-sm font-bold text-white">
+          ₹
         </div>
-        <span className="rounded-full border border-rzp-border bg-rzp-surface-alt px-2.5 py-1 font-mono text-[10px] text-rzp-slate">
-          {session}
-        </span>
+        <div>
+          <h1 className="text-sm font-semibold tracking-tight text-text-hi">Agent Till</h1>
+          <p className="text-[11px] text-text-low">
+            The merchant till AI agents can use — and never overspend
+          </p>
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden rounded-full border border-line bg-ink-800/70 px-2.5 py-1 font-mono text-[10px] text-text-mid sm:inline">
+            {session}
+          </span>
+          <span className="rounded-full border border-mint/30 bg-mint/10 px-2.5 py-1 text-[10px] font-medium text-mint">
+            {merchant || 'merchant'}
+          </span>
+          <button
+            onClick={signOut}
+            className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-text-mid transition-colors hover:border-accent hover:text-text-hi"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="min-h-0 border-r border-rzp-border">
+      <main className="relative z-10 grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <section className="min-h-0 border-r border-line">
           <ChatPanel
             items={items}
             busy={busy}
             upsell={upsell}
             checkout={checkout}
+            agentEnabled={config?.agent_enabled ?? true}
             onSend={send}
             onAddUpsell={(p) => {
               setUpsell(null)
@@ -219,16 +261,16 @@ export default function App() {
           />
         </section>
 
-        <section className="flex min-h-0 flex-col bg-white">
-          <div className="flex gap-1 border-b border-rzp-border px-3 pt-2">
+        <section className="flex min-h-0 flex-col bg-ink-850/40">
+          <div className="flex gap-1 border-b border-line px-3 pt-2">
             {(['dashboard', 'audit'] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={`rounded-t-lg px-3 py-2 text-xs font-medium transition-colors ${
                   tab === t
-                    ? 'border-b-2 border-rzp-blue text-rzp-blue'
-                    : 'text-rzp-muted hover:text-rzp-slate'
+                    ? 'border-b-2 border-accent text-text-hi'
+                    : 'text-text-low hover:text-text-mid'
                 }`}
               >
                 {t === 'dashboard' ? 'Merchant dashboard' : `Audit trail (${audit.length})`}

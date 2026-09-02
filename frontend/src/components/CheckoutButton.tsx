@@ -68,7 +68,7 @@ export function CheckoutButton({ razorpayOrderId, razorpayKeyId, amountInr, onPa
     <button
       onClick={openCheckout}
       disabled={busy}
-      className="w-full rounded-lg bg-rzp-blue px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-rzp-blue-dark disabled:opacity-60"
+      className="glow-accent sheen w-full rounded-lg bg-linear-to-r from-rzp-blue to-accent px-4 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px disabled:opacity-60"
     >
       {busy ? 'Opening checkout…' : `Pay ${inr(amountInr)}`}
     </button>

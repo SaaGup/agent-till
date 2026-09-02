@@ -54,10 +54,19 @@ would take the live demo down a month after the buildathon.
    | `LLM_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
    | `LLM_MODEL` | `gemini-3.5-flash-lite` |
    | `DEMO_KEY` | `sEpeHXlC3kNZ6yKKZFW2rOg0mX2KaYS3` |
+   | `JWT_SECRET` | `uC4aopTn_Ve9oandDPym1P-KlxIaE0Odtjs_qB3xV9SZGAfczNg4BYQNodwS_0mR` |
+   | `DEMO_MERCHANT_EMAIL` | `merchant@agenttill.dev` |
+   | `DEMO_MERCHANT_PASSWORD` | `AgentTill!2026` |
    | `ALLOWED_ORIGIN` | `http://localhost:5173` *(corrected in step 4)* |
 
 6. **Create Web Service**. First build takes 3–5 minutes.
 7. When it goes live, copy the URL — something like `https://agent-till-api.onrender.com`.
+> The app **refuses to start in production** if `JWT_SECRET` is missing, too short, or left at
+> the development value, and likewise if `DEMO_KEY` is still `change-me`. A guessable signing key
+> would let anyone mint a merchant session and approve their own orders, so it fails loudly at
+> startup rather than serving traffic with the approval gate quietly open. If the deploy dies on
+> boot, read the log — it names exactly which variable is wrong.
+
 8. Check it: open `https://<your-render-url>/health`. You want:
    ```json
    {"status":"ok","environment":"production","version":"0.1.0"}
@@ -138,6 +147,20 @@ This is what makes payment confirmation trustworthy rather than dependent on the
   curl -X POST https://<your-render-url>/api/demo/force-out-of-stock/shoe-flash-2799 \
     -H "X-Demo-Key: sEpeHXlC3kNZ6yKKZFW2rOg0mX2KaYS3"
   ```
+
+## Signing in
+
+The console is behind a merchant sign-in, because approving an order releases money and that
+endpoint must not be open to anyone who finds the URL. The demo account is pre-filled on the
+login page and published deliberately so judges can get in:
+
+```
+merchant@agenttill.dev
+AgentTill!2026
+```
+
+Change `DEMO_MERCHANT_EMAIL` / `DEMO_MERCHANT_PASSWORD` in Render if you want different
+credentials — the account is seeded on first boot only, against an empty users table.
 
 ## Security notes
 

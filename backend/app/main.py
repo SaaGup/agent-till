@@ -16,10 +16,29 @@ from app.logging_config import configure_logging
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.rate_limit import limiter
 from app.payments import webhooks
-from app.routers import chat, dashboard, payments
+from app.auth.service import seed_demo_merchant
+from app.routers import auth, chat, dashboard, payments
 
 configure_logging()
 log = logging.getLogger(__name__)
+
+
+DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-in-production"
+
+
+def _check_production_secrets() -> None:
+    """Refuse to boot a production deployment on the development signing key. A weak JWT secret
+    means anyone can mint a merchant session and approve their own orders — better to fail loudly
+    at startup than to serve traffic with the approval gate quietly wide open."""
+    if settings.environment != "production":
+        return
+    problems = []
+    if settings.jwt_secret == DEV_JWT_SECRET or len(settings.jwt_secret) < 32:
+        problems.append("JWT_SECRET must be set to a random value of at least 32 characters")
+    if settings.demo_key in {"", "change-me"}:
+        problems.append("DEMO_KEY must be set to a non-default value")
+    if problems:
+        raise RuntimeError("Refusing to start in production: " + "; ".join(problems))
 
 
 def _run_migrations() -> None:
@@ -35,24 +54,29 @@ def _run_migrations() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _check_production_secrets()
     _run_migrations()
     with SessionLocal() as db:
         inserted = seed_catalog(db)
+        seed_demo_merchant(db)
 
     # The MCP tool surface runs inside this process on loopback only: the agents that call it
     # live here too, so it never needs a public port.
-    from mcp_server.server import mcp
+    mcp_task = None
+    if settings.enable_mcp_server:
+        from mcp_server.server import mcp
 
-    mcp_task = asyncio.create_task(
-        mcp.run_async(transport="streamable-http", host="127.0.0.1", port=settings.mcp_port)
-    )
+        mcp_task = asyncio.create_task(
+            mcp.run_async(transport="streamable-http", host="127.0.0.1", port=settings.mcp_port)
+        )
     log.info("startup complete", extra={"seeded_products": inserted, "env": settings.environment})
     yield
-    mcp_task.cancel()
-    try:
-        await mcp_task
-    except asyncio.CancelledError:
-        pass
+    if mcp_task is not None:
+        mcp_task.cancel()
+        try:
+            await mcp_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -75,6 +99,7 @@ app.add_middleware(
 )
 register_error_handlers(app)
 
+app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(dashboard.router)
 app.include_router(payments.router)

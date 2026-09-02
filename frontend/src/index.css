@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
-/* Palette sampled from razorpay.com's live computed styles rather than approximated,
-   so the surface reads as Razorpay's rather than merely blue. */
+/* Core palette sampled from razorpay.com's live computed styles rather than approximated, then
+   extended into a dark "control room" surface — the console is something an operator watches,
+   and depth reads better against dark than against white. */
 @theme {
   --color-rzp-blue: #2950da;
   --color-rzp-blue-bright: #305eff;
@@ -15,7 +16,27 @@
   --color-rzp-surface-alt: #f8fafc;
   --color-rzp-border: #e3e9f2;
 
+  /* Dark console surfaces */
+  --color-ink-900: #070c16;
+  --color-ink-850: #0a1120;
+  --color-ink-800: #0d1526;
+  --color-ink-700: #131d33;
+  --color-ink-600: #1b2942;
+  --color-ink-500: #26375a;
+  --color-line: #1e2c48;
+  --color-line-soft: #16223a;
+  --color-text-hi: #eaf0fb;
+  --color-text-mid: #9fb0cb;
+  --color-text-low: #64768f;
+
+  --color-accent: #4d7cff;
+  --color-accent-soft: #6f96ff;
+  --color-mint: #34d8a0;
+  --color-amber: #f7b955;
+  --color-rose: #fb7185;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 html,
@@ -26,20 +47,106 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-rzp-surface);
-  color: var(--color-rzp-navy);
+  background: var(--color-ink-900);
+  color: var(--color-text-hi);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
-/* Keep long tool traces and audit tables scrollable without the page itself sliding sideways. */
+/* ── Ambient depth ─────────────────────────────────────────────────────────────
+   Two slow-drifting radial washes. Kept on a pseudo-element and pointer-events:none
+   so nothing here can intercept a click on the console beneath it. */
+.aurora {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(58rem 34rem at 12% -8%, rgba(77, 124, 255, 0.22), transparent 60%),
+    radial-gradient(46rem 30rem at 96% 4%, rgba(52, 216, 160, 0.1), transparent 62%),
+    radial-gradient(50rem 40rem at 62% 108%, rgba(41, 80, 218, 0.2), transparent 65%);
+  animation: drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-2%, 2%, 0) scale(1.07);
+  }
+}
+
+/* Perspective floor grid — the "industrial" cue, and the cheapest honest 3D on the page. */
+.grid-floor {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 46vh;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(120, 160, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(120, 160, 255, 0.16) 1px, transparent 1px);
+  background-size: 62px 62px;
+  transform: perspective(30rem) rotateX(72deg);
+  transform-origin: bottom center;
+  mask-image: linear-gradient(to top, black 8%, transparent 78%);
+  animation: floor 14s linear infinite;
+}
+
+@keyframes floor {
+  to {
+    background-position: 0 62px;
+  }
+}
+
+.glass {
+  background: linear-gradient(160deg, rgba(24, 36, 61, 0.82), rgba(11, 18, 33, 0.86));
+  border: 1px solid var(--color-line);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+/* Depth comes from stacked shadows plus a top highlight, the way a real bevelled surface
+   catches light — a single flat shadow reads as a sticker. */
+.raise {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 40px -20px rgba(0, 0, 0, 0.9),
+    0 4px 14px -8px rgba(0, 0, 0, 0.6);
+}
+
+.raise-lg {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 46px 90px -36px rgba(0, 0, 0, 0.95),
+    0 12px 30px -14px rgba(0, 0, 0, 0.7);
+}
+
+.glow-accent {
+  box-shadow:
+    0 0 0 1px rgba(77, 124, 255, 0.4),
+    0 12px 40px -12px rgba(77, 124, 255, 0.55);
+}
+
+/* Tilt is applied via inline transform from a mousemove handler; the transition smooths the
+   return to rest so the card settles instead of snapping. */
+.tilt {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
 .scroll-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: #cbd6e6;
+  background: #24334f;
   border-radius: 999px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: #33456a;
 }
 .scroll-thin::-webkit-scrollbar-track {
   background: transparent;
@@ -48,7 +155,7 @@ body {
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -56,5 +163,67 @@ body {
   }
 }
 .animate-rise {
-  animation: rise 0.18s ease-out;
+  animation: rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes float-y {
+  from {
+    transform: translateY(-6px);
+  }
+  to {
+    transform: translateY(6px);
+  }
+}
+.animate-float {
+  animation: float-y 5.5s ease-in-out infinite alternate;
+}
+
+@keyframes sheen {
+  from {
+    background-position: -220% 0;
+  }
+  to {
+    background-position: 220% 0;
+  }
+}
+.sheen {
+  background-image: linear-gradient(
+    100deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.16) 50%,
+    transparent 62%
+  );
+  background-size: 220% 100%;
+  animation: sheen 3.4s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(77, 124, 255, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(77, 124, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(77, 124, 255, 0);
+  }
+}
+.pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* Anyone who has asked the OS to calm things down gets a still page rather than a moving one. */
+@media (prefers-reduced-motion: reduce) {
+  .aurora,
+  .grid-floor,
+  .animate-float,
+  .sheen,
+  .pulse-ring,
+  .animate-rise {
+    animation: none !important;
+  }
+  .tilt {
+    transition: none !important;
+    transform: none !important;
+  }
 }

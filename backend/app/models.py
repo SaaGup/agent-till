@@ -102,3 +102,14 @@ class AuditLogEntry(Base):
     explanation: Mapped[str] = mapped_column(Text, default="")
     amount_inr: Mapped[float | None] = mapped_column(Float, nullable=True)
     order_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(16), default="merchant")
+    display_name: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

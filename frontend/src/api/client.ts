@@ -1,19 +1,66 @@
 import type { AgentEvent, Approval, AuditEntry, Metrics, Order, Product, UpsellProposal } from '../types'
 
 const BASE = import.meta.env.VITE_API_BASE ?? ''
+const TOKEN_KEY = 'agent-till-token'
+
+export const auth = {
+  get token(): string | null {
+    try {
+      return localStorage.getItem(TOKEN_KEY)
+    } catch {
+      return null
+    }
+  },
+  set(token: string) {
+    try {
+      localStorage.setItem(TOKEN_KEY, token)
+    } catch {
+      /* private browsing — the session simply won't persist a reload */
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(TOKEN_KEY)
+    } catch {
+      /* nothing to clear */
+    }
+  },
+}
+
+/** Raised when the merchant session is missing or expired, so callers can bounce to sign-in
+ *  instead of rendering an empty dashboard that looks broken. */
+export class Unauthorized extends Error {}
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = auth.token
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   })
+  if (res.status === 401 || res.status === 403) throw new Unauthorized(await res.text())
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
   return res.json() as Promise<T>
 }
 
 export const api = {
   config: () =>
-    json<{ razorpay_key_id: string; payments_live: boolean; agent_enabled: boolean }>('/api/config'),
+    json<{
+      razorpay_key_id: string
+      payments_live: boolean
+      agent_enabled: boolean
+      demo_merchant_email: string
+      demo_merchant_password: string
+    }>('/api/config'),
+
+  login: (email: string, password: string) =>
+    json<{ token: string; user: { email: string; role: string; display_name: string } }>(
+      '/api/auth/login',
+      { method: 'POST', body: JSON.stringify({ email, password }) },
+    ),
   catalog: () => json<Product[]>('/api/catalog'),
   orders: () => json<Order[]>('/api/orders'),
   auditLog: () => json<AuditEntry[]>('/api/audit-log'),
