@@ -1,0 +1,36 @@
+# Render Blueprint for the Agent Till backend.
+# The database lives on Neon rather than Render: Render's free Postgres expires 30 days after
+# creation, which would silently kill a live demo link a month after the buildathon.
+services:
+  - type: web
+    name: agent-till-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.7"
+      - key: ENVIRONMENT
+        value: production
+      # Everything below is set in the Render dashboard, never committed.
+      - key: DATABASE_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: LLM_MODEL
+        value: gemini-3-flash
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: DEMO_KEY
+        sync: false

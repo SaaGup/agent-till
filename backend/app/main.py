@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,11 +11,10 @@ from slowapi import _rate_limit_exceeded_handler
 
 from app.catalog.data import seed_catalog
 from app.config import settings
-from app.db import SessionLocal, engine
+from app.db import SessionLocal
 from app.logging_config import configure_logging
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.rate_limit import limiter
-from app.models import Base
 from app.payments import webhooks
 from app.routers import chat, dashboard, payments
 
@@ -22,9 +22,20 @@ configure_logging()
 log = logging.getLogger(__name__)
 
 
+def _run_migrations() -> None:
+    """Schema changes ship as migrations, not create_all — on a hosted database the schema has
+    to move forward without dropping what's already there."""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "migrations"))
+    command.upgrade(cfg, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    _run_migrations()
     with SessionLocal() as db:
         inserted = seed_catalog(db)
 

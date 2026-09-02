@@ -183,9 +183,9 @@ export default function App() {
             ₹
           </div>
           <div>
-            <h1 className="text-sm font-semibold text-rzp-navy">Agent-Ready Storefront</h1>
+            <h1 className="text-sm font-semibold text-rzp-navy">Agent Till</h1>
             <p className="text-[11px] text-rzp-muted">
-              Bounded, gated and audited agentic checkout on Razorpay test mode
+              The merchant till AI agents can use — and never overspend
             </p>
           </div>
         </div>

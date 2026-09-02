@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     # OpenRouter, Gemini's compat endpoint); "anthropic" uses the Claude API directly.
     llm_provider: str = "openai_compat"
     llm_api_key: str = ""
-    llm_base_url: str = "https://api.groq.com/openai/v1"
-    llm_model: str = "llama-3.3-70b-versatile"
+    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    llm_model: str = "gemini-3-flash"
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
